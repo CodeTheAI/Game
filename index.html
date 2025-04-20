@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Retro Shooter Game</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+</head>
+<body>
+    <div id="game-container">
+        <!-- Landing Screen -->
+        <div id="landing-screen">
+            <div class="game-logo">
+                <h1 class="game-title">NEON SIEGE</h1>
+                <div class="game-subtitle">RETRO EDITION</div>
+            </div>
+            <div class="flame-effect"></div>
+            <button id="play-btn">
+                <i class="fas fa-play"></i> PLAY GAME
+            </button>
+            <button id="stats-btn">Statistics</button> 
+            <div class="game-instructions">
+                <P><strong>INSTRUCTIONS:</strong></P>
+                <p>WASD or Arrow Keys to move</p>
+                <p>SPACE to shoot, HOLD to rapid fire</p>
+                <p>ESC to quit</p>
+            </div>
+        </div>
+
+        <div id="statistics-screen" class="hidden">
+            <h2>Player Statistics</h2>
+            <div class="stats-container">
+                <div class="stat-item">
+                    <div class="stat-label">Highest Score</div>
+                    <div id="highest-score" class="stat-value">0</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-label">Highest Wave</div>
+                    <div id="highest-wave" class="stat-value">0</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-label">Longest Survival</div>
+                    <div id="longest-survival" class="stat-value">0:00</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-label">Times Played</div>
+                    <div id="times-played" class="stat-value">0</div>
+                </div>
+            </div>
+            <button id="back-from-stats-btn">Back to Menu</button>
+        </div>
+
+        <!-- Game Canvas -->
+        <canvas id="game-canvas" class="hidden"></canvas>
+        
+        <!-- UI Overlay -->
+        <div id="ui-overlay" class="hidden">
+            <div class="button-container">
+                <button id="pause-btn"><i class="fas fa-pause"></i></button>
+            </div>
+            <div id="score-display">Score: 0</div>
+            <div id="wave-display">Wave: 1</div>
+            <div id="enemies-display">Enemies: 0/10</div>
+        </div>
+        
+        <!-- Pause Screen -->
+        <div id="pause-screen" class="hidden">
+            <div class="pause-text">PAUSED</div>
+            <div class="pause-menu">
+                <button id="unpause-btn"><i class="fas fa-play"></i> Resume Game</button>
+                <button id="quit-btn"><i class="fas fa-home"></i> Quit to Menu</button>
+            </div>
+        </div>
+        
+        <!-- Game Over Screen -->
+        <div id="game-over-screen" class="hidden">
+            <div class="game-over-text">GAME OVER</div>
+            <div class="final-score">Score: 0</div>
+            <div class="game-over-menu">
+                <button id="retry-btn"><i class="fas fa-redo"></i> Play Again</button>
+                <button id="quit-from-gameover-btn"><i class="fas fa-home"></i> Main Menu</button>
+            </div>
+        </div>
+        
+        <!-- Wave Complete Screen -->
+        <div id="wave-complete-screen" class="hidden">
+            <div class="wave-complete-text">WAVE COMPLETE!</div>
+            <div class="wave-number">Wave 1 Cleared</div>
+            <div class="wave-score">Score: 0</div>
+            <button id="next-wave-btn"><i class="fas fa-forward"></i> Next Wave</button>
+        </div>
+    </div>
+    <script src="game.js"></script>
+</body>
+</html>
