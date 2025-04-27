@@ -1,0 +1,29 @@
+// Game design constants
+const DESIGNS = {
+    // Player design - Enhanced with cyber elements and energy core
+    player: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 50 50"><defs><filter id="playerGlow"><feGaussianBlur stdDeviation="1.5" result="glow"/><feMerge><feMergeNode in="glow"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs><circle cx="25" cy="25" r="20" fill="%232ecc71" stroke="%23fff" stroke-width="2" filter="url(%23playerGlow)"/><path d="M25,10 L35,25 L25,40 L15,25 Z" fill="%2327ae60" stroke="%23fff" stroke-width="1"/><circle cx="25" cy="25" r="8" fill="%23fff" opacity="0.8"/><circle cx="25" cy="25" r="4" fill="%2327ae60"/><path d="M15,20 L20,25 L15,30" stroke="%23fff" stroke-width="1" fill="none"/><path d="M35,20 L30,25 L35,30" stroke="%23fff" stroke-width="1" fill="none"/></svg>',
+    
+    // Enemy designs
+    normalMob: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 50 50"><circle cx="25" cy="25" r="20" fill="%23e74c3c" stroke="%23fff" stroke-width="2"/><circle cx="25" cy="25" r="10" fill="%23c0392b" stroke="%23fff" stroke-width="1"/><circle cx="18" cy="18" r="3" fill="%23fff"/></svg>',
+    
+    speedsterMob: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 50 50"><polygon points="25,5 5,30 25,45 45,30" fill="%233498db" stroke="%23fff" stroke-width="2"/><polygon points="25,15 15,30 25,35 35,30" fill="%232980b9" stroke="%23fff" stroke-width="1"/><circle cx="20" cy="20" r="3" fill="%23fff"/><circle cx="30" cy="20" r="3" fill="%23fff"/></svg>',
+    
+    tankMob: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 50 50"><rect x="10" y="10" width="30" height="30" fill="%239b59b6" stroke="%23fff" stroke-width="2"/><rect x="15" y="15" width="20" height="20" fill="%238e44ad" stroke="%23fff" stroke-width="1"/><circle cx="20" cy="20" r="3" fill="%23fff"/><circle cx="30" cy="20" r="3" fill="%23fff"/><rect x="20" y="30" width="10" height="5" fill="%23fff"/></svg>',
+    
+    shooterMob: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 50 50"><circle cx="25" cy="25" r="20" fill="%23f39c12" stroke="%23fff" stroke-width="2"/><polygon points="25,15 35,25 25,35 15,25" fill="%23d35400" stroke="%23fff" stroke-width="1"/><circle cx="20" cy="20" r="3" fill="%23fff"/><circle cx="30" cy="20" r="3" fill="%23fff"/><rect x="20" y="30" width="10" height="3" fill="%23fff"/></svg>',
+    
+    bomberMob: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 50 50"><circle cx="25" cy="25" r="20" fill="%23e67e22" stroke="%23fff" stroke-width="2"/><circle cx="25" cy="25" r="15" fill="%23d35400" stroke="%23fff" stroke-width="1"/><circle cx="25" cy="25" r="10" fill="%23e74c3c" stroke="%23fff" stroke-width="1"/><circle cx="25" cy="25" r="5" fill="%23c0392b" stroke="%23fff" stroke-width="1"/><circle cx="20" cy="15" r="3" fill="%23fff"/><circle cx="30" cy="15" r="3" fill="%23fff"/></svg>',
+    
+    laserShooterMob: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 50 50"><polygon points="25,5 5,25 25,45 45,25" fill="%231abc9c" stroke="%23fff" stroke-width="2"/><rect x="20" y="15" width="10" height="20" fill="%2316a085" stroke="%23fff" stroke-width="1"/><circle cx="20" cy="20" r="3" fill="%23fff"/><circle cx="30" cy="20" r="3" fill="%23fff"/><rect x="15" y="30" width="20" height="3" fill="%23fff"/></svg>',
+    
+    // Boss designs
+    boss1: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 50 50"><circle cx="25" cy="25" r="23" fill="%23c0392b" stroke="%23fff" stroke-width="3"/><circle cx="25" cy="25" r="15" fill="%23e74c3c" stroke="%23fff" stroke-width="2"/><circle cx="18" cy="18" r="4" fill="%23fff"/><circle cx="32" cy="18" r="4" fill="%23fff"/><path d="M15,30 Q25,40 35,30" stroke="%23fff" stroke-width="2" fill="none"/></svg>',
+    
+    boss2: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 50 50"><rect x="5" y="5" width="40" height="40" fill="%232c3e50" stroke="%23fff" stroke-width="3"/><rect x="10" y="10" width="30" height="30" fill="%2334495e" stroke="%23fff" stroke-width="2"/><circle cx="20" cy="20" r="5" fill="%23e74c3c"/><circle cx="30" cy="20" r="5" fill="%23e74c3c"/><rect x="15" y="35" width="20" height="3" fill="%23fff"/></svg>',
+    
+    boss3: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 50 50"><polygon points="25,5 5,20 5,35 25,45 45,35 45,20" fill="%239b59b6" stroke="%23fff" stroke-width="3"/><polygon points="25,15 15,25 15,35 25,40 35,35 35,25" fill="%238e44ad" stroke="%23fff" stroke-width="2"/><circle cx="20" cy="25" r="4" fill="%23e74c3c"/><circle cx="30" cy="25" r="4" fill="%23e74c3c"/><path d="M20,35 Q25,40 30,35" stroke="%23fff" stroke-width="2" fill="none"/></svg>',
+    
+    boss4: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 50 50"><circle cx="25" cy="25" r="23" fill="%23f39c12" stroke="%23fff" stroke-width="3"/><polygon points="25,10 10,25 25,40 40,25" fill="%23e67e22" stroke="%23fff" stroke-width="2"/><circle cx="18" cy="20" r="4" fill="%23e74c3c"/><circle cx="32" cy="20" r="4" fill="%23e74c3c"/><polygon points="20,30 25,35 30,30" fill="%23fff"/></svg>',
+    
+    boss5: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 50 50"><circle cx="25" cy="25" r="23" fill="%23000" stroke="%23fff" stroke-width="3"/><circle cx="25" cy="25" r="18" fill="%23333" stroke="%23fff" stroke-width="2"/><circle cx="25" cy="25" r="13" fill="%23666" stroke="%23fff" stroke-width="1"/><circle cx="18" cy="18" r="4" fill="%23e74c3c"/><circle cx="32" cy="18" r="4" fill="%23e74c3c"/><path d="M15,30 Q25,40 35,30" stroke="%23fff" stroke-width="2" fill="none"/></svg>'
+};

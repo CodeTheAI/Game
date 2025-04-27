@@ -1,1086 +1,984 @@
-
-// Game constants
-const CANVAS_WIDTH = 800;
-const CANVAS_HEIGHT = 600;
-const PLAYER_SPEED = 5;
-const BULLET_SPEED = 10;
-const SPAWN_INTERVAL_INITIAL = 2000; // 2 seconds
-const SPAWN_INTERVAL_MINIMUM = 500;  // Fastest possible spawn rate (0.5 seconds)
-const SPAWN_RATE_DECREASE_PER_WAVE = 150; // How much faster spawns get each wave
-const SPAWN_ACCELERATION_TIME = 10000; // Time in ms over which spawn rate accelerates within a wave
-const BASE_ENEMIES_PER_WAVE = 10; // Base number of enemies in wave 1
-
-// Mob types and their properties
-const MOB_TYPES = {
-    NORMAL: {
-        health: 100,
-        speed: 2,
-        damage: 10,
-        color: '#e74c3c',
-        size: 30,
-        points: 10
-    },
-    SPEEDSTER: {
-        health: 50,
-        speed: 4,
-        damage: 15,
-        color: '#3498db',
-        size: 20,
-        points: 20
-    },
-    TANK: {
-        health: 200,
-        speed: 1,
-        damage: 25,
-        color: '#9b59b6',
-        size: 40,
-        points: 30
-    }
-};
-
-// Game state
-let gameStartTimestamp = 0;
-let currentGameTime = 0;
-let playerStats = {
-    highestScore: 0,
-    highestWave: 0,
-    longestSurvival: 0, // in seconds
-    timesPlayed: 0
-};
-let canvas, ctx;
-let player;
-let bullets = [];
-let mobs = [];
-let score = 0;
-let wave = 1;
-let gameStartTime;
-let lastSpawnTime = 0;
-let spawnInterval = SPAWN_INTERVAL_INITIAL;
-let gameRun
-let gameRunning = false;
-let gamePaused = false;
-let keys = {
-    up: false,
-    down: false,
-    left: false,
-    right: false
-};
-let lastDirection = { x: 1, y: 0 }; // Default direction (right)
-
-// Wave management
-let enemiesRemaining = 0;
-let totalEnemiesInWave = 0;
-let enemiesSpawned = 0;
-let waveStartTime = 0;
-let waveInProgress = false;
-let waveCompleted = false;
-
-// SVG assets as data URLs - Triangles pointing in each direction
-const SVG_ASSETS = {
-    playerRight: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 50 50"><polygon points="40,25 10,5 10,45" fill="%232ecc71" stroke="%23fff" stroke-width="2"/></svg>',
-    playerUp: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 50 50"><polygon points="25,10 5,40 45,40" fill="%232ecc71" stroke="%23fff" stroke-width="2"/></svg>',
-    playerDown: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 50 50"><polygon points="25,40 45,10 5,10" fill="%232ecc71" stroke="%23fff" stroke-width="2"/></svg>',
-    playerLeft: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 50 50"><polygon points="10,25 40,45 40,5" fill="%232ecc71" stroke="%23fff" stroke-width="2"/></svg>',
-    playerUpRight: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 50 50"><polygon points="40,15 5,30 20,45" fill="%232ecc71" stroke="%23fff" stroke-width="2"/></svg>',
-    playerUpLeft: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 50 50"><polygon points="10,15 45,30 30,45" fill="%232ecc71" stroke="%23fff" stroke-width="2"/></svg>',
-    playerDownRight: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 50 50"><polygon points="40,35 20,5 5,20" fill="%232ecc71" stroke="%23fff" stroke-width="2"/></svg>',
-    playerDownLeft: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 50 50"><polygon points="10,35 30,5 45,20" fill="%232ecc71" stroke="%23fff" stroke-width="2"/></svg>',
-    
-    // Enhanced mob designs
-    normalMob: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 50 50"><circle cx="25" cy="25" r="20" fill="%23e74c3c" stroke="%23fff" stroke-width="2"/><circle cx="25" cy="25" r="10" fill="%23c0392b" stroke="%23fff" stroke-width="1"/><circle cx="18" cy="18" r="3" fill="%23fff"/></svg>',
-    speedsterMob: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 50 50"><polygon points="25,5 5,30 25,45 45,30" fill="%233498db" stroke="%23fff" stroke-width="2"/><polygon points="25,15 15,30 25,35 35,30" fill="%232980b9" stroke="%23fff" stroke-width="1"/><circle cx="20" cy="20" r="3" fill="%23fff"/><circle cx="30" cy="20" r="3" fill="%23fff"/></svg>',
-    tankMob: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 50 50"><rect x="10" y="10" width="30" height="30" fill="%239b59b6" stroke="%23fff" stroke-width="2"/><rect x="15" y="15" width="20" height="20" fill="%238e44ad" stroke="%23fff" stroke-width="1"/><circle cx="20" cy="20" r="3" fill="%23fff"/><circle cx="30" cy="20" r="3" fill="%23fff"/><rect x="20" y="30" width="10" height="5" fill="%23fff"/></svg>'
-};
-
-// Image objects
-const images = {};
-
-
-// Load player statistics from localStorage
-function loadPlayerStats() {
-    try {
-        const savedStats = localStorage.getItem('neonSiegeStats');
-        if (savedStats) {
-            playerStats = JSON.parse(savedStats);
-            console.log("Loaded player stats:", playerStats);
-        } else {
-            console.log("No saved stats found, using defaults");
-        }
-    } catch (error) {
-        console.error("Error loading player stats:", error);
-        // If there's an error, we'll use the default stats
-    }
-    
-    // Update the display with whatever stats we have
-    updateStatisticsDisplay();
-}
-
-// Save player statistics to localStorage
-function savePlayerStats() {
-    try {
-        localStorage.setItem('neonSiegeStats', JSON.stringify(playerStats));
-        console.log("Saved player stats:", playerStats);
-    } catch (error) {
-        console.error("Error saving player stats:", error);
-    }
-}
-// Update the statistics display with current values
-function updateStatisticsDisplay() {
-    document.getElementById('highest-score').textContent = playerStats.highestScore;
-    document.getElementById('highest-wave').textContent = playerStats.highestWave;
-    document.getElementById('longest-survival').textContent = formatTime(playerStats.longestSurvival);
-    document.getElementById('times-played').textContent = playerStats.timesPlayed;
-}
-
-// Format seconds into MM:SS format
-function formatTime(seconds) {
-    const minutes = Math.floor(seconds / 60);
-    const remainingSeconds = Math.floor(seconds % 60);
-    return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
-}
-
-// Show statistics screen
-function showStatistics() {
-    document.getElementById('landing-screen').classList.add('hidden');
-    document.getElementById('statistics-screen').classList.remove('hidden');
-}
-
-// Hide statistics screen
-function hideStatistics() {
-    document.getElementById('statistics-screen').classList.add('hidden');
-    document.getElementById('landing-screen').classList.remove('hidden');
-}
-
-// Initialize the game
-function init() {
-    // Load saved statistics
-       loadPlayerStats();
-
-    // Set up landing screen
-    document.getElementById('play-btn').addEventListener('click', startGame);
-    document.getElementById('quit-btn').addEventListener('click', quitGame);
-    document.getElementById('quit-from-gameover-btn').addEventListener('click', quitGame);
-    document.getElementById('next-wave-btn').addEventListener('click', startNextWave);
-    document.getElementById('stats-btn').addEventListener('click', showStatistics);
-    document.getElementById('back-from-stats-btn').addEventListener('click', hideStatistics);
- 
-    // Load images
-    for (const [key, url] of Object.entries(SVG_ASSETS)) {
-        images[key] = new Image();
-        images[key].src = url;
-    }
-}
-
-// Calculate total enemies for a wave
-function calculateEnemiesForWave(waveNumber) {
-    return BASE_ENEMIES_PER_WAVE + (waveNumber - 1) * 5;
-}
-
-// Load player statistics from localStorage
-function loadPlayerStats() {
-    const savedStats = localStorage.getItem('neonSiegeStats');
-    if (savedStats) {
-        playerStats = JSON.parse(savedStats);
-    }
-    updateStatisticsDisplay();
-}
-
-// Save player statistics to localStorage
-function savePlayerStats() {
-    localStorage.setItem('neonSiegeStats', JSON.stringify(playerStats));
-}
-
-// Update the statistics display with current values
-function updateStatisticsDisplay() {
-    document.getElementById('highest-score').textContent = playerStats.highestScore;
-    document.getElementById('highest-wave').textContent = playerStats.highestWave;
-    document.getElementById('longest-survival').textContent = formatTime(playerStats.longestSurvival);
-    document.getElementById('times-played').textContent = playerStats.timesPlayed;
-}
-
-// Format seconds into MM:SS format
-function formatTime(seconds) {
-    const minutes = Math.floor(seconds / 60);
-    const remainingSeconds = Math.floor(seconds % 60);
-    return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
-}
-
-// Show statistics screen
-function showStatistics() {
-    document.getElementById('landing-screen').classList.add('hidden');
-    document.getElementById('statistics-screen').classList.remove('hidden');
-}
-
-// Hide statistics screen
-function hideStatistics() {
-    document.getElementById('statistics-screen').classList.add('hidden');
-    document.getElementById('landing-screen').classList.remove('hidden');
-}
-
-
-// Start the game
-function startGame() {
-    // Hide landing screen, show game elements
-    document.getElementById('landing-screen').classList.add('hidden');
-    document.getElementById('game-canvas').classList.remove('hidden');
-    document.getElementById('ui-overlay').classList.remove('hidden');
-    
-    // Set up canvas
-    canvas = document.getElementById('game-canvas');
-    canvas.width = CANVAS_WIDTH;
-    canvas.height = CANVAS_HEIGHT;
-    ctx = canvas.getContext('2d');
-
-    // Create player
-    player = {
-        x: CANVAS_WIDTH / 2 - 20,
-        y: CANVAS_HEIGHT / 2 - 20,
-        width: 40,
-        height: 40,
-        speed: PLAYER_SPEED,
-        health: 100,
-        maxHealth: 100,
-        direction: 'none' // Default direction
-    };
-
-    // Reset game state
-    bullets = [];
-    mobs = [];
-    score = 0;
-    wave = 1;
-    
-    // Set up event listeners
-    setupEventListeners();
-    setupKeyboardControls();
-
-    // Start the game
-    gameRunning = true;
-    gamePaused = false;
-    gameStartTime = Date.now();
-    lastSpawnTime = 0;
-    spawnInterval = SPAWN_INTERVAL_INITIAL;
-    
-    // Increment times played counter
-    playerStats.timesPlayed++;
-    savePlayerStats();
-    
-    // Record game start time
-    gameStartTimestamp = Date.now();
-    currentGameTime = 0;
-
-    // Initialize wave
-    startWave(wave);
-    
-    // Start game loop
-    requestAnimationFrame(gameLoop);
-}
-
-// Start a new wave
-function startWave(waveNumber) {
-    // Calculate enemies for this wave
-    totalEnemiesInWave = calculateEnemiesForWave(waveNumber);
-    enemiesRemaining = totalEnemiesInWave;
-    enemiesSpawned = 0;
-    waveInProgress = true;
-    waveCompleted = false;
-
-    // Record when this wave started (for spawn rate calculations)
-    waveStartTime = Date.now();
-    
-    // Reset spawn interval to initial value at the start of each wave
-    spawnInterval = SPAWN_INTERVAL_INITIAL;
-    
-    // Update UI
-    document.getElementById('score-display').textContent = `Score: ${score}`;
-    document.getElementById('wave-display').textContent = `Wave: ${wave}`;
-    document.getElementById('enemies-display').textContent = `Enemies: ${enemiesRemaining}/${totalEnemiesInWave}`;
-}
-
-// Start the next wave
-function startNextWave() {
-    wave++;
-    startWave(wave);
-    
-    // Hide wave complete screen
-    document.getElementById('wave-complete-screen').classList.add('hidden');
-    
-    // Resume game
-    gameRunning = true;
-    gamePaused = false;
-    requestAnimationFrame(gameLoop);
-}
-
-// Show wave complete screen
-function showWaveComplete() {
-    waveCompleted = true;
-    
-    // Show wave complete screen
-    const waveCompleteScreen = document.getElementById('wave-complete-screen');
-    waveCompleteScreen.classList.remove('hidden');
-    
-    // Update wave info
-    document.querySelector('.wave-number').textContent = `Wave ${wave} Cleared`;
-    document.querySelector('.wave-score').textContent = `Score: ${score}`;
-}
-
-// Quit game and return to landing screen
-function quitGame() {
-    // Hide game elements, show landing screen
-    document.getElementById('landing-screen').classList.remove('hidden');
-    document.getElementById('game-canvas').classList.add('hidden');
-    document.getElementById('ui-overlay').classList.add('hidden');
-    document.getElementById('pause-screen').classList.add('hidden');
-    document.getElementById('game-over-screen').classList.add('hidden');
-    document.getElementById('wave-complete-screen').classList.add('hidden');
-    
-    // Stop the game
-    gameRunning = false;
-}
-
-// Set up event listeners
-function setupEventListeners() {
-    // Pause button
-    document.getElementById('pause-btn').addEventListener('click', togglePause);
-    
-    // Unpause button
-    document.getElementById('unpause-btn').addEventListener('click', togglePause);
-
-    // Retry button
-    document.getElementById('retry-btn').addEventListener('click', resetGame);
-}
-
-// Set up keyboard controls
-function setupKeyboardControls() {
-    window.addEventListener('keydown', (e) => {
-        if (!gameRunning) return;
+class Game {
+    constructor() {
+        this.canvas = document.getElementById('game-canvas');
+        this.ctx = this.canvas.getContext('2d');
+        this.ui = new UI(this);
         
-        switch (e.key) {
-            case 'ArrowUp':
-            case 'w':
-                keys.up = true;
-                break;
-            case 'ArrowDown':
-            case 's':
-                keys.down = true;
-                break;
-            case 'ArrowLeft':
-            case 'a':
-                keys.left = true;
-                break;
-            case 'ArrowRight':
-            case 'd':
-                keys.right = true;
-                break;
-            case ' ':
-                // Shoot on spacebar
-                if (!gamePaused && gameRunning) {
-                    shootBullet();
-                }
-                break;
-            case 'p':
-                togglePause();
-                break;
-            case 'Escape':
-                if (gamePaused) {
-                    quitGame();
+        // Game state
+        this.isRunning = false;
+        this.isPaused = false;
+        this.isGameOver = false;
+        this.isUpgrading = false;
+        this.score = 0;
+        this.wave = 1;
+        this.enemiesRemaining = 1;
+        this.waveTimer = 180; // 3 minutes per wave
+        this.waveStartTime = 0;
+        this.lastUpdateTime = 0;
+        this.totalPlayTime = 0;
+        this.pauseStartTime = 0;
+        this.totalPauseTime = 0;
+        
+        // Game entities
+        this.player = null;
+        this.enemies = [];
+        this.bullets = [];
+        this.explosions = [];
+
+        // Boss phase support
+        this.bossLasers = [];
+        this.enemyBullets = [];
+        this.visualEffects = [];
+
+        // Make game instance globally accessible for enemy behaviors
+        window.game = this;
+        
+        // Debug mode
+        this.debugMode = false;
+        
+        // Wave settings
+        this.maxWave = 100;
+        this.enemyTypes = ['normal', 'speedster', 'tank'];
+        this.maxEnemies = 10; // Initial max enemies on screen
+        this.spawnDelay = 2000; // Initial spawn delay in ms
+        this.minSpawnDelay = 500; // Minimum spawn delay
+        this.lastSpawnTime = 0;
+        this.enemiesRemaining = 0;
+        
+        // Input handling
+        this.keys = {};
+        this.mousePos = { x: 0, y: 0 };
+        this.mouseDown = false;
+        
+        // Initialize event listeners
+        this.initEventListeners();
+        
+        // Resize canvas to fit window
+        this.resizeCanvas();
+        window.addEventListener('resize', () => this.resizeCanvas());
+
+        // Screen flash effect
+        this.screenFlashAlpha = 0;
+    }
+    
+    initEventListeners() {
+        // Keyboard events
+        window.addEventListener('keydown', (e) => {
+            this.keys[e.key] = true;
+            
+            // Special key handling
+            if (e.key === ' ' && this.isRunning && !this.isPaused) {
+                this.playerShoot();
+            }
+            
+            if (e.key === 'f' && this.isRunning && !this.isPaused) {
+                this.playerActivateLaser();
+            }
+            
+            if (e.key === 'Escape' && this.isRunning) {
+                this.togglePause();
+            }
+
+            // God mode toggle with G key
+            if (e.key === 'g' && this.player) {
+                this.player.godMode = !this.player.godMode;
+                const indicator = document.getElementById('god-mode-indicator');
+                if (this.player.godMode) {
+                    this.player.health = this.player.maxHealth;
+                    indicator.classList.remove('hidden');
                 } else {
-                    togglePause();
+                    indicator.classList.add('hidden');
                 }
-                break;
-        }
+            }
+        });
         
-        updatePlayerDirection();
-    });
-    
-    window.addEventListener('keyup', (e) => {
-        if (!gameRunning) return;
+        window.addEventListener('keyup', (e) => {
+            this.keys[e.key] = false;
+        });
         
-        switch (e.key) {
-            case 'ArrowUp':
-            case 'w':
-                keys.up = false;
-                break;
-            case 'ArrowDown':
-            case 's':
-                keys.down = false;
-                break;
-            case 'ArrowLeft':
-            case 'a':
-                keys.left = false;
-                break;
-            case 'ArrowRight':
-            case 'd':
-                keys.right = false;
-                break;
-        }
+        // Mouse events
+        this.canvas.addEventListener('mousemove', (e) => {
+            const rect = this.canvas.getBoundingClientRect();
+            this.mousePos = {
+                x: e.clientX - rect.left,
+                y: e.clientY - rect.top
+            };
+        });
         
-        updatePlayerDirection();
-    });
-}
-
-// Update player direction based on key presses
-function updatePlayerDirection() {
-    // Determine direction based on key combinations
-    if (keys.up && !keys.down) {
-        if (keys.right && !keys.left) {
-            player.direction = 'upRight';
-            lastDirection = { x: 0.7071, y: -0.7071 }; // Normalized diagonal vector
-        } else if (keys.left && !keys.right) {
-            player.direction = 'upLeft';
-            lastDirection = { x: -0.7071, y: -0.7071 };
-        } else {
-            player.direction = 'up';
-            lastDirection = { x: 0, y: -1 };
-        }
-    } else if (keys.down && !keys.up) {
-        if (keys.right && !keys.left) {
-            player.direction = 'downRight';
-            lastDirection = { x: 0.7071, y: 0.7071 };
-        } else if (keys.left && !keys.right) {
-            player.direction = 'downLeft';
-            lastDirection = { x: -0.7071, y: 0.7071 };
-        } else {
-            player.direction = 'down';
-            lastDirection = { x: 0, y: 1 };
-        }
-    } else if (keys.left && !keys.right) {
-        player.direction = 'left';
-        lastDirection = { x: -1, y: 0 };
-    } else if (keys.right && !keys.left) {
-        player.direction = 'right';
-        lastDirection = { x: 1, y: 0 };
+        this.canvas.addEventListener('mousedown', (e) => {
+            if (e.button === 0) { // Left mouse button
+                this.mouseDown = true;
+                if (this.isRunning && !this.isPaused) {
+                    this.playerShoot();
+                }
+            }
+        });
+        
+        this.canvas.addEventListener('mouseup', (e) => {
+            if (e.button === 0) {
+                this.mouseDown = false;
+            }
+        });
+        
+        // Prevent context menu on right-click
+        this.canvas.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+        });
     }
-}
-
-// Function to shoot bullet in the direction player is facing
-function shootBullet() {
-    // Create bullet with visual effects
-    bullets.push({
-        x: player.x + player.width / 2,
-        y: player.y + player.height / 2,
-        radius: 5,
-        dirX: lastDirection.x,
-        dirY: lastDirection.y,
-        speed: BULLET_SPEED,
-        damage: 50,
-        color: '#ffeb3b',
-        glow: 10
-    });
     
-    // Add bullet firing sound effect (if we had audio)
-    // playSound('bulletSound');
-}
-
-// Toggle pause state
-function togglePause() {
-    if (!gameRunning) return;
-    
-    gamePaused = !gamePaused;
-    document.getElementById('pause-screen').classList.toggle('hidden', !gamePaused);
-    
-    // Change pause button icon
-    const pauseBtn = document.getElementById('pause-btn');
-    if (gamePaused) {
-        pauseBtn.innerHTML = '<i class="fas fa-play"></i>';
-    } else {
-        pauseBtn.innerHTML = '<i class="fas fa-pause"></i>';
-        requestAnimationFrame(gameLoop);
+    resizeCanvas() {
+        this.canvas.width = window.innerWidth;
+        this.canvas.height = window.innerHeight;
     }
-}
 
-// Reset the game
-function resetGame() {
-    // Reset player position to center of screen
-    player = {
-        x: CANVAS_WIDTH / 2 - 20,
-        y: CANVAS_HEIGHT / 2 - 20,
-        width: 40,
-        height: 40,
-        speed: PLAYER_SPEED,
-        health: 100,
-        maxHealth: 100,
-        direction: 'right' // Default direction
-    };
-    
-    // Reset all key states to prevent movement bug
-    keys = {
-        up: false,
-        down: false,
-        left: false,
-        right: false
-    };
 
-    bullets = [];
-    mobs = [];
-    score = 0;
-    wave = 1;
-    gameStartTime = Date.now();
-    lastSpawnTime = 0;
-    spawnInterval = SPAWN_INTERVAL_INITIAL;
-    gameRunning = true;
-    gamePaused = false;
-
-    // Increment times played counter
-    playerStats.timesPlayed++;
-    savePlayerStats();
     
-    // Reset game start time
-    gameStartTimestamp = Date.now();
-    currentGameTime = 0;
-    
-    // Start first wave
-    startWave(wave);
-    
-    document.getElementById('game-over-screen').classList.add('hidden');
-    document.getElementById('wave-complete-screen').classList.add('hidden');
-    
-    // Reset pause button icon
-    document.getElementById('pause-btn').innerHTML = '<i class="fas fa-pause"></i>';
-    // Log reset for debugging
-    console.log("Game reset: Player position reset to center");
-    // Start game loop
-    requestAnimationFrame(gameLoop);
-}
-
-// Main game loop
-function gameLoop(timestamp) {
-    if (gamePaused || !gameRunning || waveCompleted) return;
-
-    // Update current game time
-    currentGameTime = (Date.now() - gameStartTimestamp) / 1000; // in seconds
-    
-    // Clear canvas
-    ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
-        // Draw background grid (retro effect)
-        drawGrid();
-    
-        // Handle keyboard movement
-        handlePlayerMovement();
+    start() {
+        // Reset game state
+        this.isRunning = true;
+        this.isPaused = false;
+        this.isGameOver = false;
+        this.isUpgrading = false;
+        this.score = 0;
+        this.wave = 1;
+        this.waveTimer = 180; // 3 minutes per wave
+        this.totalPlayTime = 0;
+        this.totalPauseTime = 0;
         
-        // Update game elements
-        updateSpawnRate();
-        spawnMobs();
-        updateBullets();
-        updateMobs();
-        checkCollisions();
+
+        // Create player
+        const playerX = this.canvas.width / 2;
+        const playerY = this.canvas.height / 2;
+        this.player = new Player(playerX, playerY, 15);
         
-        // Draw game elements
-        drawPlayer();
-        drawBullets();
-        drawMobs();
+        // Reset entities
+        this.enemies = [];
+        this.bullets = [];
+        this.explosions = [];
+        
+        // Reset wave settings
+         this.updateWaveSettings();
+        this.enemiesRemaining = 10; // Start with 10 enemies in wave 1
+
+        // Explicitly hide pause overlay
+        const pauseOverlay = document.getElementById('pause-overlay');
+        pauseOverlay.classList.add('hidden');
+        const pauseButton = document.getElementById('pause-button').querySelector('i');
+        pauseButton.className = 'fas fa-pause';
+
+        
+        
+        // Start game loop
+        this.waveStartTime = performance.now();
+        this.lastUpdateTime = performance.now();
+        requestAnimationFrame(() => this.gameLoop());
+    }
+    
+    restart() {
+        this.ui.showScreen('game');
+        this.start();
+        
+    }
+    
+    togglePause() {
+        if (!this.isRunning || this.isGameOver || this.isUpgrading) return;
+        
+        this.isPaused = !this.isPaused;
+        this.ui.togglePauseOverlay(this.isPaused);
+        
+        if (this.isPaused) {
+            // Store the time when pause started
+            this.pauseStartTime = performance.now();
+        } else {
+            // Add the pause duration to total pause time
+            this.totalPauseTime += performance.now() - this.pauseStartTime;
+            // Resume game loop
+            this.lastUpdateTime = performance.now();
+            requestAnimationFrame(() => this.gameLoop());
+        }
+    }
+
+    resume() {
+        this.isPaused = false;
+        this.ui.togglePauseOverlay(false);
+        // Add the pause duration to total pause time
+        this.totalPauseTime += performance.now() - this.pauseStartTime;
+        this.lastUpdateTime = performance.now();
+        requestAnimationFrame(() => this.gameLoop());
+    }
+    
+    gameLoop() {
+        if (!this.isRunning || this.isPaused || this.isGameOver || this.isUpgrading) return;
+        
+        const currentTime = performance.now();
+        const deltaTime = (currentTime - this.lastUpdateTime) / 1000; // Convert to seconds
+        this.lastUpdateTime = currentTime;
+        
+        // Determine if we're in a boss fight
+        const isBossFight = this.enemies.some(enemy => enemy.type.startsWith('boss'));
+        
+        // Update wave timer only if not in a boss fight and not in god mode
+        let timeRemaining;
+        if (isBossFight) {
+            timeRemaining = Infinity; // No timer during boss fights
+        } else if (this.player && this.player.godMode) {
+            timeRemaining = this.waveTimer; // Frozen timer in god mode
+        } else {
+            const elapsedTime = (currentTime - this.waveStartTime - this.totalPauseTime) / 1000;
+            timeRemaining = Math.max(0, this.waveTimer - elapsedTime);
+            
+            // Complete wave if timer runs out
+            if (timeRemaining <= 0) {
+                this.completeWave();
+                return;
+            }
+        }
+        
+        // Update game state
+        this.update(currentTime, deltaTime);
+        this.render();
         
         // Update UI
-        document.getElementById('score-display').textContent = `Score: ${score}`;
-        document.getElementById('wave-display').textContent = `Wave: ${wave}`;
-        document.getElementById('enemies-display').textContent = `Enemies: ${enemiesRemaining}/${totalEnemiesInWave}`;
+        this.ui.updateHUD(
+            this.score,
+            this.wave,
+            this.enemiesRemaining,
+            Math.ceil(this.player.health),
+            this.player.maxHealth,
+            isBossFight ? this.enemies.find(e => e.type.startsWith('boss')) : null
+        );
+        this.ui.updateTimer(timeRemaining, isBossFight);
         
-        // Check if wave is complete
-        if (enemiesRemaining === 0 && enemiesSpawned === totalEnemiesInWave && mobs.length === 0) {
-            showWaveComplete();
+        // Check for wave completion by killing all enemies
+        if (this.enemiesRemaining <= 0) {
+            this.completeWave();
             return;
         }
         
-        // Check game over condition
-        if (player.health <= 0) {
-            gameOver();
-        } else {
-            requestAnimationFrame(gameLoop);
+        // Update laser cooldown UI
+        const laserCooldownPercent = this.player.getLaserCooldownPercent(currentTime);
+        this.ui.updateLaserCooldown(laserCooldownPercent);
+        
+        // Continue game loop
+        requestAnimationFrame(() => this.gameLoop());
+    }
+    
+    createExplosionEffect(x, y, radius) {
+        // Create expanding ring
+        const ring = {
+            x: x,
+            y: y,
+            radius: 0,
+            maxRadius: radius,
+            startTime: performance.now(),
+            duration: 500,
+            update: function(currentTime) {
+                const elapsed = currentTime - this.startTime;
+                if (elapsed > this.duration) return true;
+                this.radius = this.maxRadius * (elapsed / this.duration);
+                return false;
+            },
+            draw: function(ctx) {
+                ctx.save();
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+                const progress = (performance.now() - this.startTime) / this.duration;
+                const alpha = 1 - progress;
+                
+                // Create gradient for explosion ring
+                const gradient = ctx.createRadialGradient(
+                    this.x, this.y, 0,
+                    this.x, this.y, this.radius
+                );
+                gradient.addColorStop(0, `rgba(255, 200, 50, ${alpha * 0.8})`);
+                gradient.addColorStop(0.6, `rgba(255, 100, 50, ${alpha * 0.6})`);
+                gradient.addColorStop(1, `rgba(255, 50, 50, ${alpha * 0.3})`);
+                
+                ctx.fillStyle = gradient;
+                ctx.fill();
+                ctx.restore();
+            }
+        };
+        this.visualEffects.push(ring);
+
+        // Create explosion particles
+        for (let i = 0; i < 30; i++) {
+            const angle = (i / 30) * Math.PI * 2;
+            const speed = 2 + Math.random() * 3;
+            const size = 2 + Math.random() * 3;
+            const particle = {
+                x: x,
+                y: y,
+                vx: Math.cos(angle) * speed,
+                vy: Math.sin(angle) * speed,
+                size: size,
+                life: 1,
+                startTime: performance.now(),
+                duration: 800 + Math.random() * 400,
+                
+                update: function(currentTime) {
+                    const elapsed = currentTime - this.startTime;
+                    if (elapsed > this.duration) return true;
+                    
+                    this.life = 1 - (elapsed / this.duration);
+                    this.x += this.vx;
+                    this.y += this.vy;
+                    this.vx *= 0.98;
+                    this.vy *= 0.98;
+                    return false;
+                },
+                
+                draw: function(ctx) {
+                    ctx.save();
+                    ctx.beginPath();
+                    ctx.arc(this.x, this.y, this.size * this.life, 0, Math.PI * 2);
+                    ctx.fillStyle = `rgba(255, ${150 + Math.random() * 100}, 50, ${this.life})`;
+                    ctx.fill();
+                    ctx.restore();
+                }
+            };
+            this.visualEffects.push(particle);
+        }
+    }
+
+    update(currentTime, deltaTime) {
+        // Update total play time
+        this.totalPlayTime += deltaTime;
+        
+        // Update player
+        this.player.update(this.keys, this.mousePos, this.canvas.width, this.canvas.height, currentTime);
+        
+        // Auto-fire if upgrade is active
+        if (this.player.upgrades.autoFire > 0 && this.enemies.length > 0) {
+            this.playerShoot();
+        }
+        
+        // Spawn enemies
+        this.spawnEnemies(currentTime);
+        
+        // Update enemies
+        for (let i = this.enemies.length - 1; i >= 0; i--) {
+            const enemy = this.enemies[i];
+            const collided = enemy.update(this.player, currentTime, this.bullets);
+            
+            // Check for collision with player
+            if (collided) {
+                if (enemy.isBoss) {
+                    // Calculate knockback direction
+                    const dx = this.player.x - enemy.x;
+                    const dy = this.player.y - enemy.y;
+                    const distance = Math.sqrt(dx * dx + dy * dy);
+                    const knockbackDistance = 150; // Increased from 100 to 150 for more noticeable effect
+                    
+                    // Apply knockback to player position with fixed speed
+                    const knockbackSpeed = 20;
+                    const knockbackTime = knockbackDistance / knockbackSpeed;
+                    const startTime = currentTime;
+                    
+                    // Store original position
+                    const originalX = this.player.x;
+                    const originalY = this.player.y;
+                    
+                    // Apply knockback immediately
+                    this.player.x += (dx / distance) * knockbackDistance;
+                    this.player.y += (dy / distance) * knockbackDistance;
+                    
+                    // Keep player within bounds after knockback
+                    this.player.x = Math.max(this.player.size, Math.min(this.canvas.width - this.player.size, this.player.x));
+                    this.player.y = Math.max(this.player.size, Math.min(this.canvas.height - this.player.size, this.player.y));
+                    
+                    // Apply damage
+                    const gameOver = this.player.takeDamage(enemy.damage);
+                    if (gameOver) {
+                        this.gameOver();
+                        return;
+                    }
+                } else {
+                    // Regular enemies still get destroyed on collision
+                    this.score += enemy.points;
+                    const explosion = enemy.explode();
+                    if (explosion) {
+                        this.explosions.push(explosion);
+                    }
+                    this.enemies.splice(i, 1);
+                    if (!this.player.godMode) {
+                        this.enemiesRemaining--;
+                    }
+                    
+                    const gameOver = this.player.takeDamage(enemy.damage);
+                    if (gameOver) {
+                        this.gameOver();
+                        return;
+                    }
+                }
+            }
+            
+            // Check for laser damage
+            if (this.player.laserActive) {
+                const dx = enemy.x - this.player.x;
+                const dy = enemy.y - this.player.y;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                const angle = Math.atan2(dy, dx);
+                const playerAngle = Math.atan2(this.player.direction.y, this.player.direction.x);
+                const angleDiff = Math.abs(angle - playerAngle);
+                
+                // If enemy is in the laser beam (within a small angle)
+                if (angleDiff < 0.2 || angleDiff > Math.PI * 2 - 0.2) {
+                    const laserDamage = this.player.damage * 10 * deltaTime;
+                    const killed = enemy.takeDamage(laserDamage);
+                    
+                    if (killed) {
+                        this.score += enemy.points;
+                        
+                        // Check for explosion (bomber type)
+                        const explosion = enemy.explode();
+                        if (explosion) {
+                            this.explosions.push(explosion);
+                        }
+                        
+                        this.enemies.splice(i, 1);
+                        if (!this.player.godMode) {
+                            this.enemiesRemaining--;
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Update bullets
+        for (let i = this.bullets.length - 1; i >= 0; i--) {
+            const bullet = this.bullets[i];
+            const shouldRemove = bullet.update(this.canvas.width, this.canvas.height);
+            
+            if (shouldRemove) {
+                this.bullets.splice(i, 1);
+                continue;
+            }
+            
+            // Check for collisions with enemies
+            if (!bullet.isEnemy) {
+                for (let j = this.enemies.length - 1; j >= 0; j--) {
+                    const enemy = this.enemies[j];
+                    
+                    if (bullet.checkCollision(enemy)) {
+                        const killed = enemy.takeDamage(bullet.damage);
+                        
+                        if (killed) {
+                            this.score += enemy.points;
+                            
+                            // Check for explosion (bomber type)
+                            const explosion = enemy.explode();
+                            if (explosion) {
+                                this.explosions.push(explosion);
+                            }
+                            
+                            this.enemies.splice(j, 1);
+                            if (!this.player.godMode) {
+                                this.enemiesRemaining--;
+                            }
+                        }
+                        
+                        // Remove bullet unless it has ricochets left
+                        if (bullet.ricochets <= 0) {
+                            this.bullets.splice(i, 1);
+                            break;
+                        }
+                    }
+                }
+            } else {
+                // Enemy bullet hitting player
+                if (bullet.checkCollision(this.player)) {
+                    const gameOver = this.player.takeDamage(bullet.damage);
+                    this.bullets.splice(i, 1);
+                    
+                    if (gameOver) {
+                        this.gameOver();
+                        return;
+                    }
+                }
+            }
+        }
+        
+        // Process explosions
+        for (let i = this.explosions.length - 1; i >= 0; i--) {
+            const explosion = this.explosions[i];
+            
+            // Create visual effect when explosion is added
+            this.createExplosionEffect(explosion.x, explosion.y, explosion.radius);
+            
+            // Check if player is in explosion radius
+            const dx = this.player.x - explosion.x;
+            const dy = this.player.y - explosion.y;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+            
+            if (distance < explosion.radius + this.player.size) {
+                const gameOver = this.player.takeDamage(explosion.damage);
+                if (gameOver) {
+                    this.gameOver();
+                    return;
+                }
+            }
+            
+            // Check if enemies are in explosion radius
+            for (let j = this.enemies.length - 1; j >= 0; j--) {
+                const enemy = this.enemies[j];
+                const dx = enemy.x - explosion.x;
+                const dy = enemy.y - explosion.y;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                
+                if (distance < explosion.radius + enemy.size) {
+                    const killed = enemy.takeDamage(explosion.damage);
+                    
+                    if (killed) {
+                        this.score += enemy.points;
+                        this.enemies.splice(j, 1);
+                        if (!this.player.godMode) {
+                            this.enemiesRemaining--;
+                        }
+                    }
+                }
+            }
+            
+            // Remove explosion after processing
+            this.explosions.splice(i, 1);
+        }
+
+        // Update boss lasers
+        for (let i = this.bossLasers.length - 1; i >= 0; i--) {
+            const laser = this.bossLasers[i];
+            const shouldRemove = laser.update(performance.now());
+            
+            if (shouldRemove) {
+                this.bossLasers.splice(i, 1);
+            } else {
+                // Check collision with player
+                if (laser.checkCollision(this.player)) {
+                    this.player.takeDamage(laser.damage);
+                }
+            }
+        }
+        
+        // Update enemy bullets
+        for (let i = this.enemyBullets.length - 1; i >= 0; i--) {
+            const bullet = this.enemyBullets[i];
+            const shouldRemove = bullet.update(this.canvas.width, this.canvas.height);
+            
+            if (shouldRemove) {
+                this.enemyBullets.splice(i, 1);
+            } else {
+                // Check collision with player
+                if (bullet.checkCollision(this.player)) {
+                    this.player.takeDamage(bullet.damage);
+                    this.enemyBullets.splice(i, 1);
+                }
+            }
+        }
+        
+        // Update visual effects
+        for (let i = this.visualEffects.length - 1; i >= 0; i--) {
+            const effect = this.visualEffects[i];
+            const shouldRemove = effect.update(performance.now());
+            
+            if (shouldRemove) {
+                this.visualEffects.splice(i, 1);
+            }
         }
     }
     
-    // Draw background grid
-    function drawGrid() {
-        ctx.strokeStyle = 'rgba(50, 50, 50, 0.3)';
-        ctx.lineWidth = 1;
+    render() {
+        // Clear canvas
+        this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+        
+        // Draw background grid
+        this.drawGrid();
+        
+        // Draw boss lasers behind everything else
+        for (const laser of this.bossLasers) {
+            laser.draw(this.ctx);
+        }
+        
+        // Draw enemy bullets
+        for (const bullet of this.enemyBullets) {
+            bullet.draw(this.ctx);
+        }
+        
+        // Draw player bullets
+        for (const bullet of this.bullets) {
+            bullet.draw(this.ctx);
+        }
+        
+        // Draw explosions
+        for (const explosion of this.explosions) {
+            this.drawExplosion(explosion);
+        }
+        
+        // Draw enemies
+        for (const enemy of this.enemies) {
+            // Don't draw enemies during their invincibility flash every other frame
+            if (!enemy.invincible || Math.floor(performance.now() / 50) % 2 === 0) {
+                enemy.draw(this.ctx);
+            }
+        }
+        
+        // Draw player
+        if (!this.player.invincible || Math.floor(performance.now() / 50) % 2 === 0) {
+            this.player.draw(this.ctx);
+        }
+        
+        // Draw visual effects on top of everything
+        for (const effect of this.visualEffects) {
+            effect.draw(this.ctx);
+        }
+
+        // Draw screen flash
+        if (this.screenFlashAlpha > 0) {
+            this.ctx.fillStyle = `rgba(255, 0, 0, ${this.screenFlashAlpha})`;
+            this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+            this.screenFlashAlpha = Math.max(0, this.screenFlashAlpha - 0.05);
+        }
+    }
+    
+    drawGrid() {
+        const gridSize = 50;
+        const gridColor = 'rgba(50, 50, 50, 0.5)';
+        
+        this.ctx.strokeStyle = gridColor;
+        this.ctx.lineWidth = 1;
         
         // Draw vertical lines
-        for (let x = 0; x <= CANVAS_WIDTH; x += 40) {
-            ctx.beginPath();
-            ctx.moveTo(x, 0);
-            ctx.lineTo(x, CANVAS_HEIGHT);
-            ctx.stroke();
+        for (let x = 0; x < this.canvas.width; x += gridSize) {
+            this.ctx.beginPath();
+            this.ctx.moveTo(x, 0);
+            this.ctx.lineTo(x, this.canvas.height);
+            this.ctx.stroke();
         }
         
         // Draw horizontal lines
-        for (let y = 0; y <= CANVAS_HEIGHT; y += 40) {
-            ctx.beginPath();
-            ctx.moveTo(0, y);
-            ctx.lineTo(CANVAS_WIDTH, y);
-            ctx.stroke();
+        for (let y = 0; y < this.canvas.height; y += gridSize) {
+            this.ctx.beginPath();
+            this.ctx.moveTo(0, y);
+            this.ctx.lineTo(this.canvas.width, y);
+            this.ctx.stroke();
         }
     }
     
-    // Handle player movement
-    function handlePlayerMovement() {
-        let moved = false;
-        let dx = 0;
-        let dy = 0;
-        
-        if (keys.up) {
-            dy -= player.speed;
-            moved = true;
-        }
-        if (keys.down) {
-            dy += player.speed;
-            moved = true;
-        }
-        if (keys.left) {
-            dx -= player.speed;
-            moved = true;
-        }
-        if (keys.right) {
-            dx += player.speed;
-            moved = true;
-        }
-        
-        // Normalize diagonal movement
-        if (dx !== 0 && dy !== 0) {
-            const factor = 0.7071; // 1/sqrt(2)
-            dx *= factor;
-            dy *= factor;
-        }
-        
-        player.x += dx;
-        player.y += dy;
-        
-        // Keep player within canvas bounds
-        player.x = Math.max(0, Math.min(player.x, CANVAS_WIDTH - player.width));
-        player.y = Math.max(0, Math.min(player.y, CANVAS_HEIGHT - player.height));
-    }
-    
-    function updateSpawnRate() {
-        // Base spawn interval for this wave (gets faster each wave)
-        const baseIntervalForWave = Math.max(
-            SPAWN_INTERVAL_MINIMUM,
-            SPAWN_INTERVAL_INITIAL - ((wave - 1) * SPAWN_RATE_DECREASE_PER_WAVE)
+    drawExplosion(explosion) {
+        const gradient = this.ctx.createRadialGradient(
+            explosion.x, explosion.y, 0,
+            explosion.x, explosion.y, explosion.radius
         );
         
-        // Calculate how far into the current wave we are
-        const waveElapsedTime = Date.now() - waveStartTime;
+        gradient.addColorStop(0, 'rgba(255, 200, 50, 0.8)');
+        gradient.addColorStop(0.5, 'rgba(255, 100, 50, 0.6)');
+        gradient.addColorStop(1, 'rgba(255, 50, 50, 0)');
         
-        // Gradually decrease spawn interval within the wave, but only up to a point
-        if (waveElapsedTime < SPAWN_ACCELERATION_TIME) {
-            // Linear acceleration of spawn rate within the wave
-            const accelerationFactor = waveElapsedTime / SPAWN_ACCELERATION_TIME;
-            const accelerationAmount = (SPAWN_INTERVAL_INITIAL - baseIntervalForWave) * accelerationFactor;
-            
-            spawnInterval = SPAWN_INTERVAL_INITIAL - accelerationAmount;
-        } else {
-            // After acceleration period, use the base interval for this wave
-            spawnInterval = baseIntervalForWave;
-        }
-        
-        // Ensure we don't go below the minimum spawn interval
-        spawnInterval = Math.max(SPAWN_INTERVAL_MINIMUM, spawnInterval);
-        
-        // Limit spawn rate based on number of active enemies to prevent overwhelming the player
-        const activeEnemies = mobs.length;
-        if (activeEnemies > 10) {
-            // Slow down spawns when there are many enemies
-            spawnInterval = Math.max(spawnInterval, SPAWN_INTERVAL_MINIMUM * 2);
-        }
-        
-        // Debug log (optional)
-        // console.log(`Wave ${wave}: Spawn interval = ${spawnInterval}ms, Active enemies: ${activeEnemies}`);
+        this.ctx.fillStyle = gradient;
+        this.ctx.beginPath();
+        this.ctx.arc(explosion.x, explosion.y, explosion.radius, 0, Math.PI * 2);
+        this.ctx.fill();
     }
     
-    // Spawn mobs
-    function spawnMobs() {
-        const currentTime = Date.now();
+    spawnEnemies(currentTime) {
+        // Check if it's a boss wave
+        const isBossWave = this.wave >= 20 && this.wave % 20 === 0;
         
-        // Only spawn if we haven't reached the wave limit
-        if (enemiesSpawned < totalEnemiesInWave && currentTime - lastSpawnTime > spawnInterval) {
-            lastSpawnTime = currentTime;
-            enemiesSpawned++;
+        // Don't spawn regular enemies during boss fights
+        if (isBossWave && this.enemies.length > 0) {
+            return;
+        }
+
+        if (this.enemies.length >= this.maxEnemies || this.enemiesRemaining <= this.enemies.length) {
+            return;
+        }
+        
+        if (currentTime - this.lastSpawnTime > this.spawnDelay) {
+            // Determine spawn position (outside the screen but not too far)
+            const margin = 100;
+            let x, y;
             
-            // Determine spawn position (outside the canvas)
-            let spawnX, spawnY;
-            const side = Math.floor(Math.random() * 4); // 0: top, 1: right, 2: bottom, 3: left
-            
+            const side = Math.floor(Math.random() * 4);
             switch (side) {
-                case 0: // top
-                    spawnX = Math.random() * CANVAS_WIDTH;
-                    spawnY = -50;
+                case 0: // Top
+                    x = Math.random() * this.canvas.width;
+                    y = -margin;
                     break;
-                case 1: // right
-                    spawnX = CANVAS_WIDTH + 50;
-                    spawnY = Math.random() * CANVAS_HEIGHT;
+                case 1: // Right
+                    x = this.canvas.width + margin;
+                    y = Math.random() * this.canvas.height;
                     break;
-                case 2: // bottom
-                    spawnX = Math.random() * CANVAS_WIDTH;
-                    spawnY = CANVAS_HEIGHT + 50;
+                case 2: // Bottom
+                    x = Math.random() * this.canvas.width;
+                    y = this.canvas.height + margin;
                     break;
-                case 3: // left
-                    spawnX = -50;
-                    spawnY = Math.random() * CANVAS_HEIGHT;
+                case 3: // Left
+                    x = -margin;
+                    y = Math.random() * this.canvas.height;
                     break;
             }
+
+            // Determine enemy type
+            let enemyType;
             
-            // Determine mob type based on wave and randomness
-            const mobTypeRoll = Math.random();
-            let mobType;
-            
-            // Higher waves have more difficult enemies
-            if (wave >= 15) {
-                if (mobTypeRoll < 0.2) {
-                    mobType = 'NORMAL';
-                } else if (mobTypeRoll < 0.5) {
-                    mobType = 'SPEEDSTER';
-                } else {
-                    mobType = 'TANK';
-                }
-            } else if (wave >= 10) {
-                if (mobTypeRoll < 0.3) {
-                    mobType = 'NORMAL';
-                } else if (mobTypeRoll < 0.6) {
-                    mobType = 'SPEEDSTER';
-                } else {
-                    mobType = 'TANK';
-                }
-            } else if (wave >= 5) {
-                if (mobTypeRoll < 0.4) {
-                    mobType = 'NORMAL';
-                } else if (mobTypeRoll < 0.8) {
-                    mobType = 'SPEEDSTER';
-                } else {
-                    mobType = 'TANK';
-                }
+            // Check if it's a boss wave (every 20th wave starting from wave 20)
+            if (this.wave >= 20 && this.wave % 20 === 0 && this.enemies.length === 0) {
+                // Clear all existing enemies when spawning a boss
+                this.enemies = [];
+                this.enemyBullets = [];
+                this.bullets = [];
+                this.explosions = [];
+                
+                // Boss wave - spawn a boss based on wave number
+                const bossLevel = Math.min(5, Math.ceil((this.wave - 20) / 20) + 1);
+                enemyType = `boss${bossLevel}`;
+                
+                // Center the boss spawn position
+                x = this.canvas.width / 2;
+                y = this.canvas.height / 2;
             } else {
-                if (mobTypeRoll < 0.6) {
-                    mobType = 'NORMAL';
-                } else if (mobTypeRoll < 0.9) {
-                    mobType = 'SPEEDSTER';
-                } else {
-                    mobType = 'TANK';
-                }
+                // Regular enemy - choose randomly from available types
+                const availableTypes = this.getAvailableEnemyTypes();
+                enemyType = availableTypes[Math.floor(Math.random() * availableTypes.length)];
             }
             
-            const mobProps = MOB_TYPES[mobType];
+            // Create and add enemy
+            const enemy = new Enemy(x, y, enemyType, this.wave);
+            this.enemies.push(enemy);
             
-            // Create mob with visual enhancements
-            mobs.push({
-                x: spawnX,
-                y: spawnY,
-                width: mobProps.size,
-                height: mobProps.size,
-                speed: mobProps.speed * (1 + (wave * 0.1)), // Speed increases with wave
-                health: mobProps.health * (1 + (wave * 0.2)), // Health increases with wave
-                maxHealth: mobProps.health * (1 + (wave * 0.2)),
-                damage: mobProps.damage,
-                points: mobProps.points,
-                type: mobType,
-                rotation: 0,
-                rotationSpeed: (Math.random() - 0.5) * 0.1, // Random rotation for visual effect
-                pulsePhase: Math.random() * Math.PI * 2 // Random starting phase for pulsing effect
+            // Update spawn time
+            this.lastSpawnTime = currentTime;
+        }
+    }
+    
+    getAvailableEnemyTypes() {
+        // Unlock enemy types based on wave number
+        if (this.wave >= 81) {
+            return ['normal', 'speedster', 'tank', 'shooter', 'bomber', 'laserShooter'];
+        } else if (this.wave >= 61) {
+            return ['normal', 'speedster', 'tank', 'shooter', 'bomber'];
+        } else if (this.wave >= 41) {
+            return ['normal', 'speedster', 'tank', 'shooter'];
+        } else if (this.wave >= 21) {
+            return ['normal', 'speedster', 'tank'];
+        } else {
+            return ['normal', 'speedster'];
+        }
+    }
+    
+    playerShoot() {
+        if (!this.player || !this.isRunning || this.isPaused) return;
+        
+        const currentTime = performance.now();
+        if (currentTime - this.player.lastShotTime < this.player.fireRate) {
+            return;
+        }
+        
+        // Calculate direction to mouse
+        const dx = this.mousePos.x - this.player.x;
+        const dy = this.mousePos.y - this.player.y;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+        
+        if (distance === 0) return;
+        
+        const direction = {
+            x: dx / distance,
+            y: dy / distance
+        };
+        
+        // Create bullets based on multi-fire upgrade
+        const bulletCount = 1 + this.player.upgrades.multiFire;
+        const spreadAngle = Math.PI / 8; // 22.5 degrees
+        
+        for (let i = 0; i < bulletCount; i++) {
+            let bulletDirection = { ...direction };
+            
+            // Apply spread for multi-fire
+            if (bulletCount > 1) {
+                const angle = spreadAngle * (i / (bulletCount - 1) - 0.5);
+                const cos = Math.cos(angle);
+                const sin = Math.sin(angle);
+                
+                bulletDirection = {
+                    x: direction.x * cos - direction.y * sin,
+                    y: direction.x * sin + direction.y * cos
+                };
+            }
+            
+            // Create bullet with consistent speed
+            const bullet = new Bullet(
+                this.player.x,
+                this.player.y,
+                bulletDirection,
+                this.player.damage,
+                this.player.upgrades.ricochet,
+                false,
+                8 // Use consistent bullet speed
+            );
+            
+            this.bullets.push(bullet);
+        }
+        
+        // Update last shot time
+        this.player.lastShotTime = currentTime;
+    }
+    
+    playerActivateLaser() {
+        if (!this.player || !this.isRunning || this.isPaused) return;
+        
+        const currentTime = performance.now();
+        this.player.activateLaser(currentTime);
+    }
+    
+    completeWave() {
+        this.wave++;
+        
+        if (this.wave > this.maxWave) {
+            // Player has completed all waves - game over with victory
+            this.gameOver(true);
+            return;
+        }
+        
+        // Clear all entities first
+        this.enemies = [];
+        this.bullets = [];
+        this.explosions = [];
+        this.bossLasers = [];
+        this.enemyBullets = [];
+        this.visualEffects = [];
+        
+        // Update wave settings
+        this.updateWaveSettings();
+
+        // Reset laser state completely
+        this.player.laserCharges = this.player.maxLaserCharges;
+        this.player.laserActive = false;
+        this.player.lastLaserActivation = -15000;
+        this.player.laserLastUsed = -15000;
+
+        // Set new wave's enemy count
+        this.enemiesRemaining = Math.ceil(20 * (1 + (this.wave - 1) * 0.1));
+        
+        // Heal player slightly between waves
+        this.player.health = Math.min(this.player.maxHealth, this.player.health + this.player.maxHealth * 0.2);
+        
+        // 20% chance for upgrades, except for boss waves which always give upgrades
+        const isBossWave = this.wave >= 20 && this.wave % 20 === 0;
+        if (isBossWave || Math.random() < 0.2) {
+            // Show upgrade screen
+            this.isUpgrading = true;
+            this.ui.showUpgradeOptions(this.player);
+        } else {
+            // Show wave cleared screen
+            this.ui.showWaveCleared(this.wave, this.score);
+            // Auto-continue after 2 seconds
+            setTimeout(() => {
+                this.ui.showScreen('game');
+                this.waveStartTime = performance.now();
+                this.lastUpdateTime = performance.now();
+                requestAnimationFrame(() => this.gameLoop());
+            }, 2000);
+        }
+    }
+
+    resumeAfterUpgrade() {
+        this.isUpgrading = false;
+        this.isPaused = false;
+        
+        // Hide upgrade screen and show game screen
+        this.ui.showScreen('game');
+        
+        // Reset wave timers
+        this.waveStartTime = performance.now();
+        this.lastUpdateTime = performance.now();
+        
+        // Resume game loop
+        requestAnimationFrame(() => this.gameLoop());
+    }
+    
+    updateWaveSettings() {
+        // Check if it's a boss wave (every 20th wave starting from wave 20)
+        const isBossWave = this.wave >= 20 && this.wave % 20 === 0;
+        
+        if (isBossWave) {
+            // Boss wave settings
+            this.maxEnemies = 1; // Only the boss
+            this.spawnDelay = 0; // Immediate spawn
+            this.enemiesRemaining = 1;
+            this.waveTimer = Infinity; // No timer for boss fights
+        } else {
+            // Regular wave settings
+            this.maxEnemies = Math.min(20, 10 + Math.floor(this.wave / 2));
+            this.spawnDelay = Math.max(this.minSpawnDelay, 2000 - (this.wave * 100));
+            this.enemiesRemaining = Math.ceil(20 * (1 + (this.wave - 1) * 0.1));
+            this.waveTimer = 180; // 3 minutes for normal waves
+        }
+    }
+    
+    gameOver(victory = false) {
+        this.isRunning = false;
+        this.isGameOver = true;
+
+        // Create death particles
+        const numParticles = 50;
+        for (let i = 0; i < numParticles; i++) {
+            const angle = (i / numParticles) * Math.PI * 2;
+            const speed = 2 + Math.random() * 3;
+            const particle = {
+                x: this.player.x,
+                y: this.player.y,
+                vx: Math.cos(angle) * speed,
+                vy: Math.sin(angle) * speed,
+                size: 2 + Math.random() * 3,
+                life: 1,
+                color: this.player.color,
+                startTime: performance.now(),
+                duration: 1500 + Math.random() * 500,
+                update: function(currentTime) {
+                    const elapsed = currentTime - this.startTime;
+                    if (elapsed > this.duration) return true;
+                    this.life = 1 - (elapsed / this.duration);
+                    this.x += this.vx;
+                    this.y += this.vy;
+                    this.vy += 0.2; // Add gravity
+                    return false;
+                },
+                draw: function(ctx) {
+                    ctx.save();
+                    ctx.globalAlpha = this.life;
+                    ctx.beginPath();
+                    ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+                    ctx.fillStyle = this.color;
+                    ctx.fill();
+                    ctx.restore();
+                }
+            };
+            this.visualEffects.push(particle);
+        }
+
+        // Add screen flash
+        this.screenFlashAlpha = 1;
+        
+        // Add delay before showing game over screen
+        setTimeout(() => {
+            // Update game stats using UI's GameStats instance
+            this.ui.gameStats.updateStats({
+                score: this.score,
+                wave: this.wave,
+                survivalTime: this.totalPlayTime,
+                victory: victory
             });
-        }
+            
+            // Show game over screen
+            this.ui.showGameOver(
+                this.score,
+                this.wave,
+                this.totalPlayTime,
+                this.ui.gameStats.getLongestSurvival(),
+                this.ui.gameStats.getFarthestWave()
+            );
+        }, 2000); // 2 second delay
     }
-    
-    // Update bullets
-    function updateBullets() {
-        for (let i = bullets.length - 1; i >= 0; i--) {
-            const bullet = bullets[i];
-            
-            // Move bullet
-            bullet.x += bullet.dirX * bullet.speed;
-            bullet.y += bullet.dirY * bullet.speed;
-            
-            // Bullet trail effect (would be implemented with particles if we had a particle system)
-            
-            // Remove bullets that are off-screen
-            if (
-                bullet.x < -bullet.radius ||
-                bullet.x > CANVAS_WIDTH + bullet.radius ||
-                bullet.y < -bullet.radius ||
-                bullet.y > CANVAS_HEIGHT + bullet.radius
-            ) {
-                bullets.splice(i, 1);
-            }
-        }
-    }
-    
-    // Update mobs
-    function updateMobs() {
-        for (const mob of mobs) {
-            // Calculate direction to player
-            const dirX = (player.x + player.width / 2) - (mob.x + mob.width / 2);
-            const dirY = (player.y + player.height / 2) - (mob.y + mob.height / 2);
-            
-            // Normalize direction
-            const length = Math.sqrt(dirX * dirX + dirY * dirY);
-            const normalizedDirX = dirX / length;
-            const normalizedDirY = dirY / length;
-            
-            // Move mob towards player
-            mob.x += normalizedDirX * mob.speed;
-            mob.y += normalizedDirY * mob.speed;
-            
-            // Update visual effects
-            mob.rotation += mob.rotationSpeed;
-            mob.pulsePhase += 0.05;
-        }
-    }
-    
-    // Check for collisions
-    function checkCollisions() {
-        // Check bullet-mob collisions
-        for (let i = bullets.length - 1; i >= 0; i--) {
-            const bullet = bullets[i];
-            
-            for (let j = mobs.length - 1; j >= 0; j--) {
-                const mob = mobs[j];
-                
-                // Simple collision detection (circle-rectangle)
-                const closestX = Math.max(mob.x, Math.min(bullet.x, mob.x + mob.width));
-                const closestY = Math.max(mob.y, Math.min(bullet.y, mob.y + mob.height));
-                
-                const distanceX = bullet.x - closestX;
-                const distanceY = bullet.y - closestY;
-                const distance = Math.sqrt(distanceX * distanceX + distanceY * distanceY);
-                
-                if (distance < bullet.radius) {
-                    // Bullet hit mob
-                    mob.health -= bullet.damage;
-                    
-                    // Remove bullet
-                    bullets.splice(i, 1);
-                    
-                    // Check if mob is dead
-                    if (mob.health <= 0) {
-                        score += mob.points;
-                        mobs.splice(j, 1);
-                        enemiesRemaining--;
-                        
-                        // Visual effect for mob death (would be implemented with particles)
-                    }
-                    
-                    break;
-                }
-            }
-        }
-        
-        // Check player-mob collisions
-        for (let i = mobs.length - 1; i >= 0; i--) {
-            const mob = mobs[i];
-            
-            // Simple collision detection (rectangle-rectangle)
-            if (
-                player.x < mob.x + mob.width &&
-                player.x + player.width > mob.x &&
-                player.y < mob.y + mob.height &&
-                player.y + player.height > mob.y
-            ) {
-                // Player hit by mob
-                player.health -= mob.damage;
-                
-                // Push player away from mob
-                const dirX = player.x - mob.x;
-                const dirY = player.y - mob.y;
-                const length = Math.sqrt(dirX * dirX + dirY * dirY);
-                
-                player.x += (dirX / length) * 20;
-                player.y += (dirY / length) * 20;
-                
-                // Keep player within canvas bounds
-                player.x = Math.max(0, Math.min(player.x, CANVAS_WIDTH - player.width));
-                player.y = Math.max(0, Math.min(player.y, CANVAS_HEIGHT - player.height));
-                
-                // Remove mob
-                mobs.splice(i, 1);
-                enemiesRemaining--;
-                
-                // Screen shake effect (would be implemented with camera)
-            }
-        }
-    }
-    
-    // Draw player
-    function drawPlayer() {
-        // Draw player based on direction
-        let playerImage;
-        switch (player.direction) {
-            case 'up':
-                playerImage = images.playerUp;
-                break;
-            case 'down':
-                playerImage = images.playerDown;
-                break;
-            case 'left':
-                playerImage = images.playerLeft;
-                break;
-            case 'right':
-                playerImage = images.playerRight;
-                break;
-            case 'upRight':
-                playerImage = images.playerUpRight;
-                break;
-            case 'upLeft':
-                playerImage = images.playerUpLeft;
-                break;
-            case 'downRight':
-                playerImage = images.playerDownRight;
-                break;
-            case 'downLeft':
-                playerImage = images.playerDownLeft;
-                break;
-            default:
-                playerImage = images.playerRight;
-                break;
-        }
-        
-        // Draw player glow effect
-        ctx.save();
-        ctx.shadowColor = '#2ecc71';
-        ctx.shadowBlur = 15;
-        ctx.drawImage(playerImage, player.x, player.y, player.width, player.height);
-        ctx.restore();
-        
-        // Draw player health bar
-        const healthBarWidth = player.width;
-        const healthBarHeight = 5;
-        const healthPercentage = player.health / player.maxHealth;
-        
-        ctx.fillStyle = '#333';
-        ctx.fillRect(player.x, player.y - 10, healthBarWidth, healthBarHeight);
-        
-        // Change color based on health
-        if (healthPercentage > 0.5) {
-            ctx.fillStyle = '#2ecc71';
-        } else if (healthPercentage > 0.25) {
-            ctx.fillStyle = '#f39c12';
-        } else {
-            ctx.fillStyle = '#e74c3c';
-        }
-        
-        ctx.fillRect(player.x, player.y - 10, healthBarWidth * healthPercentage, healthBarHeight);
-    }
-    
-    // Draw bullets
-    function drawBullets() {
-        for (const bullet of bullets) {
-            // Draw bullet glow
-            ctx.save();
-            ctx.shadowColor = bullet.color;
-            ctx.shadowBlur = bullet.glow;
-            
-            // Draw bullet
-            ctx.fillStyle = bullet.color;
-            ctx.beginPath();
-            ctx.arc(bullet.x, bullet.y, bullet.radius, 0, Math.PI * 2);
-            ctx.fill();
-            
-            ctx.restore();
-        }
-    }
-    
-    // Draw mobs
-    function drawMobs() {
-        for (const mob of mobs) {
-            // Get mob image based on type
-            let mobImage;
-            switch (mob.type) {
-                case 'NORMAL':
-                    mobImage = images.normalMob;
-                    break;
-                case 'SPEEDSTER':
-                    mobImage = images.speedsterMob;
-                    break;
-                case 'TANK':
-                    mobImage = images.tankMob;
-                    break;
-            }
-            
-            // Apply visual effects (rotation, pulsing)
-            ctx.save();
-            
-            // Center of mob for rotation
-            const centerX = mob.x + mob.width / 2;
-            const centerY = mob.y + mob.height / 2;
-            
-            // Translate to center, rotate, translate back
-            ctx.translate(centerX, centerY);
-            
-            // Only rotate speedster mobs
-            if (mob.type === 'SPEEDSTER') {
-                ctx.rotate(mob.rotation);
-            }
-            
-            // Pulse effect for normal mobs
-            if (mob.type === 'NORMAL') {
-                const pulseScale = 1 + Math.sin(mob.pulsePhase) * 0.1;
-                ctx.scale(pulseScale, pulseScale);
-            }
-            
-            // Draw with glow effect
-            ctx.shadowColor = MOB_TYPES[mob.type].color;
-            ctx.shadowBlur = 10;
-            
-            // Draw mob (centered)
-            ctx.drawImage(mobImage, -mob.width / 2, -mob.height / 2, mob.width, mob.height);
-        
-            ctx.restore();
-            
-            // Draw health bar
-            const healthBarWidth = mob.width;
-            const healthBarHeight = 5;
-            const healthPercentage = mob.health / mob.maxHealth;
-            
-            ctx.fillStyle = '#333';
-            ctx.fillRect(mob.x, mob.y - 10, healthBarWidth, healthBarHeight);
-            
-            ctx.fillStyle = '#e74c3c';
-            ctx.fillRect(mob.x, mob.y - 10, healthBarWidth * healthPercentage, healthBarHeight);
-        }
-    }
-    
-    // Game over
-    function gameOver() {
-        gameRunning = false;
-        
-        // Update statistics with explicit comparisons
-        if (score > playerStats.highestScore) {
-            console.log(`New high score! ${score} > ${playerStats.highestScore}`);
-            playerStats.highestScore = score;
-        }
-        
-        if (wave > playerStats.highestWave) {
-            console.log(`New highest wave! ${wave} > ${playerStats.highestWave}`);
-            playerStats.highestWave = wave;
-        }
-        
-        if (currentGameTime > playerStats.longestSurvival) {
-            console.log(`New longest survival! ${formatTime(currentGameTime)} > ${formatTime(playerStats.longestSurvival)}`);
-            playerStats.longestSurvival = currentGameTime;
-        }
-        
-    // Save updated statistics
-    savePlayerStats();
 
-        // Show game over screen
-        const gameOverScreen = document.getElementById('game-over-screen');
-        gameOverScreen.classList.remove('hidden');
-        
-        // Update final score
-        document.querySelector('.final-score').textContent = `Score: ${score}`;
-
-        // Add statistics to game over screen
-        const statsHTML = `
-        <div class="game-stats">
-            <div>Survival Time: ${formatTime(currentGameTime)}</div>
-            <div>Wave Reached: ${wave}</div>
-        </div>
-    `;
-        // Check if stats element already exists
-        let statsElement = gameOverScreen.querySelector('.game-stats');
-        if (statsElement) {
-            statsElement.innerHTML = statsHTML;
-        } else {
-            // Insert stats after final score
-            document.querySelector('.final-score').insertAdjacentHTML('afterend', statsHTML);
-        }
+    gameStats() {
+        this.ui.gameStats.displayStats();
     }
-    
-    // Start the game initialization when the page loads
-    window.addEventListener('load', init);
-    
-    
+}
